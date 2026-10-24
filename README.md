@@ -182,3 +182,26 @@ If the entity is not found, the response is:
     logs:
       custom_components.nats_io: debug
   ```
+
+## Development
+
+Install the test dependencies into a virtualenv:
+
+```bash
+python -m venv .venv
+.venv/bin/pip install pytest-homeassistant-custom-component nats-py
+```
+
+Run the unit tests (NATS is mocked, no broker needed):
+
+```bash
+.venv/bin/pytest tests/
+```
+
+Run the live tests against a real NATS broker started with Docker Compose (user/password `ha`/`ha` on port 4222):
+
+```bash
+docker compose up -d
+NATS_LIVE=1 .venv/bin/pytest tests/
+docker compose down
+```

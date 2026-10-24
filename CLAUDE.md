@@ -13,6 +13,8 @@ This is a Home Assistant custom integration (`nats_io`) that bridges Home Assist
 - `custom_components/nats_io/translations/en.json` — English translations
 - `tests/nats_io/conftest.py` — shared test fixtures
 - `tests/nats_io/test_config_flow.py` — config flow tests
+- `tests/nats_io/test_live.py` — live tests against a real broker (skipped unless `NATS_LIVE=1`)
+- `docker-compose.yml` — local NATS broker for the live tests
 
 ## Development
 
@@ -21,7 +23,10 @@ This is a Home Assistant custom integration (`nats_io`) that bridges Home Assist
 pytest tests/
 ```
 
-Tests use `pytest-asyncio` in auto mode (`asyncio_mode = auto` in `pytest.ini`). Mock `nats.connect` via `unittest.mock.patch` — do not hit a real broker in tests.
+Tests use `pytest-asyncio` in auto mode (`asyncio_mode = auto` in `pytest.ini`). Mock `nats.connect` via `unittest.mock.patch` — do not hit a real broker in unit tests. The only exception is `tests/nats_io/test_live.py`, which is opt-in:
+```bash
+docker compose up -d && NATS_LIVE=1 pytest tests/
+```
 
 **Deploy to HA instance:**
 ```bash

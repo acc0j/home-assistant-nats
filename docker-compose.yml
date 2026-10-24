@@ -1,0 +1,6 @@
+services:
+  nats:
+    image: nats:2.12-alpine
+    command: ["--user", "ha", "--pass", "ha"]
+    ports:
+      - "4222:4222"
