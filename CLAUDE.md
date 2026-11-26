@@ -53,6 +53,12 @@ This rsync's `custom_components/nats_io/` to the configured HA host. The target 
 - **Response payload:** same fields as a state change event (`timestamp`, `entity_id`, `device_id`, `area_id`, `state`, `attributes`, `last_changed`), or `{ "error": "..." }` if the entity is not found
 - Requires a NATS reply subject; messages without one are ignored
 
+### Actions (`custom_components/nats_io/services.py`)
+- Registered once in `async_setup` (not per entry); both resolve the loaded config entry at call time (`config_entry_id` is only needed with more than one entry).
+- `nats_io.publish`: `subject`, `payload` (string sent verbatim, anything else as JSON), optional `headers`, `jetstream` (default false). With `jetstream: true` returns `{stream, seq, duplicate}`, else `{}`.
+- `nats_io.fetch`: `stream`, `consumer` (an existing durable pull consumer), `batch` (1-100), `timeout`, `ack` (default true). Returns `{messages: [{subject, data, headers, seq, num_delivered, timestamp}]}`; `data` is parsed JSON when valid. It caps the pull at the consumer's pending count so a short or empty queue returns at once.
+- Broker errors surface as `HomeAssistantError`; a timed-out pull is an empty result.
+
 **If the subject format or payload schema changes, update `README.md` accordingly.**
 
 ## Code conventions
