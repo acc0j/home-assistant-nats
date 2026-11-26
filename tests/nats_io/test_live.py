@@ -12,6 +12,7 @@ import pytest
 
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_SSL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
 from custom_components.nats_io.const import DOMAIN
@@ -23,7 +24,7 @@ pytestmark = [
 
 # 127.0.0.1, not localhost: pytest-socket only allows that host
 HOST = "127.0.0.1"
-PORT = 4222
+PORT = int(os.environ.get("NATS_PORT", "4222"))
 USER = PASSWORD = "ha"
 
 
@@ -91,3 +92,86 @@ async def test_service_command(hass: HomeAssistant, entry, nc) -> None:
             await asyncio.sleep(0.05)
 
     assert calls[0].data["entity_id"] == "light.living_room"
+
+
+@pytest.fixture
+async def queue(nc):
+    """Create a stream and a durable pull consumer, removed afterwards."""
+    js = nc.jetstream()
+    await js.add_stream(name="LIVE_Q", subjects=["live.queue"])
+    await js.add_consumer("LIVE_Q", durable_name="digest", ack_policy="explicit")
+    yield
+    await js.delete_stream("LIVE_Q")
+
+
+async def test_publish_jetstream_then_fetch(hass: HomeAssistant, entry, queue) -> None:
+    """publish(jetstream) lands in the stream; fetch returns it once, then the queue is empty."""
+    ack = await hass.services.async_call(
+        DOMAIN,
+        "publish",
+        {"subject": "live.queue", "payload": {"message": "hello"}, "jetstream": True},
+        blocking=True,
+        return_response=True,
+    )
+    assert ack["stream"] == "LIVE_Q"
+    assert ack["seq"] == 1
+
+    first = await hass.services.async_call(
+        DOMAIN,
+        "fetch",
+        {"stream": "LIVE_Q", "consumer": "digest"},
+        blocking=True,
+        return_response=True,
+    )
+    assert [m["data"] for m in first["messages"]] == [{"message": "hello"}]
+    assert first["messages"][0]["seq"] == 1
+
+    second = await hass.services.async_call(
+        DOMAIN,
+        "fetch",
+        {"stream": "LIVE_Q", "consumer": "digest"},
+        blocking=True,
+        return_response=True,
+    )
+    assert second == {"messages": []}
+
+
+async def test_fetch_ack_false_redelivers(hass: HomeAssistant, entry, queue, nc) -> None:
+    """ack: false leaves the message pending on the consumer."""
+    await nc.jetstream().publish("live.queue", b"peek me")
+
+    peeked = await hass.services.async_call(
+        DOMAIN,
+        "fetch",
+        {"stream": "LIVE_Q", "consumer": "digest", "ack": False},
+        blocking=True,
+        return_response=True,
+    )
+    assert [m["data"] for m in peeked["messages"]] == ["peek me"]
+
+    info = await nc.jetstream().consumer_info("LIVE_Q", "digest")
+    assert info.num_ack_pending == 1
+
+
+async def test_fetch_missing_consumer_errors(hass: HomeAssistant, entry, queue) -> None:
+    """An unknown consumer raises an HA error."""
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "fetch",
+            {"stream": "LIVE_Q", "consumer": "nope"},
+            blocking=True,
+            return_response=True,
+        )
+
+
+async def test_publish_jetstream_without_stream_errors(hass: HomeAssistant, entry) -> None:
+    """A JetStream publish to a subject no stream captures raises an HA error."""
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "publish",
+            {"subject": "no.stream.here", "payload": "x", "jetstream": True},
+            blocking=True,
+            return_response=True,
+        )

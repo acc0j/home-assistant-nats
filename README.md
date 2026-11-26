@@ -171,6 +171,74 @@ If the entity is not found, the response is:
 
 > **Note:** The message must include a reply subject (NATS request/reply pattern). Messages without a reply subject are ignored.
 
+## Actions: publish and fetch (JetStream)
+
+The integration also adds two Home Assistant actions, so automations can write to NATS and read a queue back, including through [JetStream](https://docs.nats.io/nats-concepts/jetstream).
+
+### `nats_io.publish`
+
+| Field             | Required | Description |
+|-------------------|----------|-------------|
+| `subject`         | Yes      | Subject to publish to. |
+| `payload`         | Yes      | Message body. A string is sent as-is; anything else is sent as JSON. |
+| `headers`         | No       | Message headers, e.g. `Nats-Msg-Id` for de-duplication. |
+| `jetstream`       | No       | `true` publishes through JetStream and waits for the ack. Fails if no stream captures the subject. Default `false` (core publish). |
+| `config_entry_id` | No       | Only needed when more than one NATS entry is set up. |
+
+With `jetstream: true` the action returns the broker's acknowledgement (`stream`, `seq`, `duplicate`); otherwise it returns `{}`.
+
+### `nats_io.fetch`
+
+Pulls up to `batch` messages from an **existing durable pull consumer** and returns them. It returns at once, with no wait, when nothing is pending. Create the stream and consumer yourself (for example with the `nats` CLI or your own provisioning); the integration does not manage them.
+
+| Field             | Required | Description |
+|-------------------|----------|-------------|
+| `stream`          | Yes      | Stream name. |
+| `consumer`        | Yes      | Durable pull consumer name. |
+| `batch`           | No       | Maximum messages, 1-100. Default `10`. |
+| `timeout`         | No       | Seconds to wait for the broker to deliver the batch. Default `2`. |
+| `ack`             | No       | Acknowledge the messages. Default `true`. With `false` they are not acknowledged and are redelivered after the consumer's ack wait (a peek). |
+| `config_entry_id` | No       | Only needed when more than one NATS entry is set up. |
+
+**Response:**
+
+```json
+{
+  "messages": [
+    {
+      "subject": "voice.queue",
+      "data": { "message": "Front door left open" },
+      "headers": {},
+      "seq": 42,
+      "num_delivered": 1,
+      "timestamp": "2024-01-15T12:34:56.789012+00:00"
+    }
+  ]
+}
+```
+
+`data` is parsed JSON when the body is valid JSON, otherwise the text.
+
+**Example: collect a queue, then use it in an automation**
+
+```yaml
+actions:
+  - action: nats_io.publish
+    data:
+      subject: voice.queue
+      payload: { message: "Front door left open", priority: normal }
+      jetstream: true
+  # ...later...
+  - action: nats_io.fetch
+    data: { stream: VOICE, consumer: digest, batch: 50 }
+    response_variable: queued
+  - action: notify.notify
+    data:
+      message: "{{ queued.messages | map(attribute='data.message') | join('. ') }}"
+```
+
+The NATS user needs permission to publish the subject, and for `fetch` the JetStream API subjects `$JS.API.CONSUMER.INFO.<stream>.<consumer>` and `$JS.API.CONSUMER.MSG.NEXT.<stream>.<consumer>`, `$JS.ACK.<stream>.<consumer>.>` for acks, plus `_INBOX.>` to subscribe.
+
 ## Troubleshooting
 
 - **Cannot connect** — verify the broker host, port, and that it is reachable from Home Assistant. Check if TLS is correctly configured on both sides.

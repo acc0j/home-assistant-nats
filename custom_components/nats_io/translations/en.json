@@ -24,5 +24,74 @@
                 }
             }
         }
+    },
+    "exceptions": {
+        "not_loaded": {
+            "message": "The NATS integration is not loaded"
+        },
+        "entry_required": {
+            "message": "Several NATS entries are loaded; set config_entry_id"
+        },
+        "entry_not_found": {
+            "message": "No loaded NATS entry with that config_entry_id"
+        }
+    },
+    "services": {
+        "publish": {
+            "name": "Publish",
+            "description": "Publishes a message to a NATS subject, optionally through JetStream, which returns the stream, sequence number and duplicate flag.",
+            "fields": {
+                "subject": {
+                    "name": "Subject",
+                    "description": "The NATS subject to publish to."
+                },
+                "payload": {
+                    "name": "Payload",
+                    "description": "Message body. A string is sent as-is; anything else is sent as JSON."
+                },
+                "headers": {
+                    "name": "Headers",
+                    "description": "Optional message headers, such as Nats-Msg-Id for de-duplication."
+                },
+                "jetstream": {
+                    "name": "JetStream",
+                    "description": "Publish through JetStream and wait for the stream's acknowledgement. Fails if no stream captures the subject."
+                },
+                "config_entry_id": {
+                    "name": "Config entry",
+                    "description": "The NATS entry to use. Only needed when more than one is set up."
+                }
+            }
+        },
+        "fetch": {
+            "name": "Fetch",
+            "description": "Pulls up to a batch of messages from an existing durable JetStream pull consumer and returns them. Returns at once when nothing is pending.",
+            "fields": {
+                "stream": {
+                    "name": "Stream",
+                    "description": "The JetStream stream name."
+                },
+                "consumer": {
+                    "name": "Consumer",
+                    "description": "The name of an existing durable pull consumer on the stream."
+                },
+                "batch": {
+                    "name": "Batch size",
+                    "description": "The maximum number of messages to fetch (1-100)."
+                },
+                "timeout": {
+                    "name": "Timeout",
+                    "description": "How long to wait for the broker to deliver the batch, in seconds."
+                },
+                "ack": {
+                    "name": "Acknowledge",
+                    "description": "Acknowledge the messages so they are not redelivered. Turn off to peek; unacknowledged messages come back after the consumer's ack wait."
+                },
+                "config_entry_id": {
+                    "name": "Config entry",
+                    "description": "The NATS entry to use. Only needed when more than one is set up."
+                }
+            }
+        }
     }
 }
